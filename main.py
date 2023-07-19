@@ -4,6 +4,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 import time
 from selenium.common.exceptions import NoSuchElementException
+from discord import Embed
+import requests
 
 # SELENIUM OPTIONS
 chrome_options = webdriver.ChromeOptions()
@@ -30,23 +32,25 @@ colors = {"Default": 0,
 # Prices Dictionary: Key -> Name, Value -> Array of Prices [DEFAULT, BLACK, TW, GREY, CRIMSON, PINK, COBALT, SKY BLUE, BS, SAFFRON, LIME, FG, ORANGE, PURPLE, GOLD]
 rlPrices = {"Credits": [1]}
 
-# All Trades Dict
-all_trades = []
-
-usernames = []
-
 itemType = ["Decal", "Explosion", "Car", "Wheel", "Boost", "Topper", "Antenna", "Trail", "Banner", "Border", "Engine",
             "Paint"]
 
 discordChannels = {
-    "limited": 1130137592873111593,
-    "uncommon": 1130137761584787546,
-    "rare": 1130137750067216485,
-    "very rare": 1130137722372227123,
-    "import": 1130137574317498438,
-    "exotic": 1130137708765921370,
-    "blackmarket": 1130137676171980831
+    "limited": WEBHOOK_URL,
+    "uncommon": WEBHOOK_URL,
+    "rare": WEBHOOK_URL,
+    "very rare": WEBHOOK_URL,
+    "import": WEBHOOK_URL,
+    "exotic": WEBHOOK_URL,
+    "blackmarket": WEBHOOK_URL
 }
+
+def send_trade_message(trade_message, webhook_url):
+    embed = Embed(title="Trade Details", description=trade_message, color=0x00ff00)  # Create an embed object
+    payload = {
+        "embeds": [embed.to_dict()]
+    }
+    requests.post(webhook_url, json=payload)
 
 
 # FROM RLINSIDER.gg
@@ -132,9 +136,7 @@ def getRLPrices():
 
 
 # From Rocketleaguegarage.com
-def getRLTrades():
-    all_trades = []
-
+def getRLTrades(all_trades, usernames):
     driver = webdriver.Chrome(options=chrome_options)
 
     # Wait to load driver
@@ -155,7 +157,13 @@ def getRLTrades():
         platform_div = trade.find_element(By.CSS_SELECTOR, "div.rlg-trade__platformname.--no-kerning")
         epic_id = platform_div.text.split("\n")[1]
 
-        usernames.append(epic_id)
+        if len(platform_text) >= 2:
+            epic_id = platform_text[1]
+        else:
+            epic_id = "None"
+
+        if epic_id is not None:
+            usernames.append(epic_id)
 
         trade_items_has = trade.find_element(By.CSS_SELECTOR, "div.rlg-trade__itemshas")
         trade_items_wants = trade.find_element(By.CSS_SELECTOR, "div.rlg-trade__itemswants")
@@ -227,7 +235,7 @@ def getRLTrades():
     driver.quit()
 
 
-def checkGoodTrades():
+def checkGoodTrades(all_trades, usernames):
     for tradeo in range(0, len(all_trades)):
         for index in range(0, len(all_trades[tradeo]["Has"])):
             string_has = ""
@@ -273,13 +281,25 @@ def checkGoodTrades():
 
                         if string_has_value > string_wants_value * 1.5 and "limited" not in \
                                 all_trades[tradeo]["Has"][index]["gradient"]:
-                            print(usernames[tradeo])
-                            print("Item Has:", str(string_has))
-                            print("Value:", str(string_has_value))
-                            print("Item Wants:", str(string_wants))
-                            print("Value:", str(string_wants_value))
-                            print()
+                            webhook_url = ""
+                                          
+                            trade_message = f"{usernames[tradeo]}\n" \
+                                            f"Item Has: {string_has}\n" \
+                                            f"Value: {string_has_value}\n" \
+                                            f"Item Wants: {string_wants}\n" \
+                                            f"Value: {string_wants_value}\n"
+                                          
+                            if "premium" in all_trades[tradeo]["Has"][index]["gradient"]:
+                                if "premium" in all_trades[tradeo]["Wants"][index]["gradient"]:
+                                    webhook_url = DEFAULT WEBHOOK URL
+                                else:
+                                    webhook_url = discordChannels[all_trades[tradeo]["Wants"][index]["gradient"].replace("rlgitem__gradient ", "")]
+                            else:
+                                webhook_url = discordChannels[all_trades[tradeo]["Has"][index]["gradient"].replace("rlgitem__gradient ", "")]
 
+                            # Send the trade message as an embedded message to the Discord channel using the webhook
+                            send_trade_message(trade_message, webhook_url)
+                                          
             except IndexError:
                 pass
             except TypeError:
@@ -287,12 +307,13 @@ def checkGoodTrades():
             except ValueError:
                 pass
 
-
 def main():
     getRLPrices()
-    for i in range(0, 100):
-        getRLTrades()
-        checkGoodTrades()
+    for i in range(0, 1000):
+        all_trades = []
+        usernames = []
+        getRLTrades(all_trades, usernames)
+        checkGoodTrades(all_trades, usernames)
 
 
 if __name__ == "__main__":
